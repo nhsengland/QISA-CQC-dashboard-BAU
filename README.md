@@ -3,7 +3,7 @@ Repository to store all the code relating to the latest CQC ratings data require
 
 
 ## About this project / method
-This repo contains code to produce the CQC GP and Care Homes dashboards. 
+This repo contains code to produce analysis for the CQC GP and Care Homes dashboards. 
 The code retrieves the latest CQC ratings data from the UKHF_CQC tables in the UDAL Lake/main warehouse to produce monthly CQC dashboards. The code contains some conditions to obtain the most recent information from the UKHF_CQC tables on the day the code is executed. 
 Requirements
 -  Access to Azure Databricks
