@@ -1,4 +1,5 @@
-# QISA-CQC-dashboard-BAU
+# CQC GP and Care Homes monthly reporting
+Repository to store all the code relating to the latest CQC ratings data required for monthly CQC GP and Care Homes ratings reporting
 
 NHS England
 Quality Improvement Strategy Analysis Team
