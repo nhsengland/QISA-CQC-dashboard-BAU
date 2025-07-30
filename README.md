@@ -26,7 +26,7 @@ However, the new SAF ratings are not included in this data, so the second part o
 Finally, these two outputs are combined to produce the final output, which is then saved in the Q&I Lake for use in the Care Homes Tableau workbook.
 
 ## Data sources
-CQC API - Home - [CQC Developer Portal](https://api.service.cqc.org.uk)
+CQC API - Home -  [CQC Developer Portal](https://api.service.cqc.org.uk)
 
 Please see the data flow charts 
 
