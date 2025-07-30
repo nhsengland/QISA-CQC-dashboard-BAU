@@ -1,6 +1,8 @@
 # CQC GP and Care Homes monthly reporting
 Repository to store all the code relating to the latest CQC ratings data required for monthly CQC GP and Care Homes ratings reporting
 
+Link to GP dashbord: https://future.nhs.uk/Quality/view?objectID=33056464
+Link to Care Homes dashboard: https://future.nhs.uk/Quality/view?objectID=33114832
 
 ## About this project / method
 This repo contains code to produce analysis for the CQC GP and Care Homes dashboards. 
