@@ -1,23 +1,25 @@
-%Python
+#Title : CQC Care Homes Dashboard code
+#Team  : Quality Improvement Strategic Analysis (QISA) Team
 
-#Load the CQC tables and commissioner hierarchies tables from the lake
+##Load the CQC tables and commissioner hierarchies tables from the lake
+
+%Python
 Locations_SCD = spark.read.parquet("abfss://unrestricted@udalstdatacuratedprod.dfs.core.windows.net/reference/UKHD/CQC/Locations_SCD/Published/1/")
 Locations_LinkTable_Current_Ratings = spark.read.parquet("abfss://unrestricted@udalstdatacuratedprod.dfs.core.windows.net/reference/UKHD/CQC/Locations_LinkTable_Current_Ratings/Published/1/")
 commissioner_hierarchies = spark.read.parquet("abfss://reporting@udalstdatacuratedprod.dfs.core.windows.net/unrestricted/reference/UKHD/ODS/Commissioner_Hierarchies/")
 Locations_LinkTable_GAC_Service_Types = spark.read.parquet("abfss://unrestricted@udalstdatacuratedprod.dfs.core.windows.net/reference/UKHD/CQC/Locations_LinkTable_GAC_Service_Types/Published/1/")
 
-#Python
+##Create sql tables in databricks
 
-#Create sql tables in databricks
+#Python
 Locations_SCD.createOrReplaceTempView("Locations_SCD")
 Locations_LinkTable_Current_Ratings.createOrReplaceTempView("Locations_LinkTable_Current_Ratings")
 commissioner_hierarchies.createOrReplaceTempView("commissioner_hierarchies")
 Locations_LinkTable_GAC_Service_Types.createOrReplaceTempView("Locations_LinkTable_GAC_Service_Types")
 
+##This retrieves the latest CQC ratings for Care Homes and saves them in a table in databricks
+
 %sql
-
-#This retrieves the latest CQC ratings for Care Homes and saves them in a table in databricks
-
 DROP TABLE IF EXISTS tbl_CQC_Carehome_Current_Ratings;
 CREATE OR REPLACE Table tbl_CQC_Carehome_Current_Ratings AS
 
@@ -173,11 +175,11 @@ and a.registrationStatus='Registered'
 and a.organisationType='Location'
 and a.careHome='Y'
 
+
+
+##This retrieves the SAF ratings for all locations from the JSON text in the Location_SCD table and saves the data in the CQC assessment ratings table
+
 %sql
-
-#This retrieves the SAF ratings for all locations from the JSON text in the Location_SCD table and saves the data in the CQC assessment ratings table
-
-
 DROP VIEW IF EXISTS AssessmentRatings;
 
 CREATE OR REPLACE TEMP VIEW AssessmentRatings AS
@@ -351,9 +353,9 @@ where JSON_Plain_Text IS NOT NULL
 and registrationStatus='Registered' 
 and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' ;
 
+##Create the final table for CQC Assessment Ratings
 
-
---Now we will create the final table for CQC Assessment Ratings
+%sql
 -- Check if the target table exists, if so, drop it
 DROP TABLE IF EXISTS CQC_Assessment_Ratings;
 
@@ -395,10 +397,10 @@ Select Location_ID,
 	  FROM AssessmentRatings;
 
 
+
+##This retrieves the latest CQC ratings for Care Homes published from SAF (CQC Single Assessment Framework), combines with CQC ratings from previous process and saves the combined care home ratings data in a table in databricks.
+
 %sql
-
-#This retrieves the latest CQC ratings for Care Homes published from SAF (CQC Single Assessment Framework), combines with CQC ratings from previous process and saves the combined care home ratings data in a table in databricks.
-
 DROP TABLE IF EXISTS Assess;
 DROP TABLE IF EXISTS CareHome;
 DROP TABLE IF EXISTS GP;
@@ -519,11 +521,9 @@ SELECT *
 FROM Staging_Combined_CH_SAF;
 
 
+##Update the table set Requires Improvement to Requires improvement
 
 %sql
-
-#Update the table set Requires Improvement to Requires improvement
-
 Update tbl_CQC_Carehome_Ratings 
 set  latest_rating = 'Requires improvement'
 where Latest_Rating = 'Requires Improvement'
@@ -562,11 +562,9 @@ def fn_write_dataframe_to_csv(df: F.DataFrame, path_final_csv_save: str):
     _ = dbutils.fs.rm(path_temp_csv_save, recurse=True) # assigning to _ to suppress output, returning this is not important
 
 
+##Save the final output in the Q&I Lake
 
 %Python
-
-#Save the final output in the Q&I Lake
-
 Mixed_final_df = spark.table("tbl_CQC_Carehome_Ratings") # This takes the TEMP VIEW tbl_CQC_Carehome_Ratings created using SQL and ensures that the function can read it. (coded in SQL to create the TEMP VIEW)
 path_final_csv_save = "abfss://analytics-projects@udalstdataanalysisprod.dfs.core.windows.net/QualityImprovement/Quality/CQC/tbl_CQC_CH_Ratings.csv"  
 #Delete the file if it already exists,avaiding an issue with permission to overwrite the file if it was previously created by someone else:
