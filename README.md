@@ -1,5 +1,5 @@
 # CQC GP and Care Homes monthly reporting
-Repository to store all codes used to process CQC ratings data required for monthly CQC GP and Care Homes ratings BAU reporting. This is part of the process for refreshing two of the products that the Quality Improvement Strategic Analysis team own:
+Repository to store all codes used to process CQC ratings data required for monthly CQC GP and Care Homes ratings reporting. This is part of the BAU process for refreshing two of the products that the Quality Improvement Strategic Analysis team own: CQC GP dashboard: https://future.nhs.uk/Quality/view?objectID=33056464 and CQC Care Homes dashboard: https://future.nhs.uk/Quality/view?objectID=33114832
 
 
 ## About this project
