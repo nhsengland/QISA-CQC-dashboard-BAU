@@ -3,6 +3,9 @@ Repository to store all codes used to process CQC ratings data required for mont
 
 
 ## About this project
+The Care Quality Commission (CQC) is the regulator that monitors and inspects all health and social care services in England to ensure standards are being met. 
+After an inspection, they rate the quality of care for their five key questions: are they safe, effective, caring, responsive and well-led? There is a rating for each question and an overall rating. Ratings will be based on a four-point scale; Outstanding, Good, Requires Improvement or Inadequate. More information can be found on the CQC website: https://www.cqc.org.uk/about-us/how-we-do-our-job/inspection-reports
+
 This repository contains codes to produce analysis for the CQC GP and Care Homes dashboards. 
 The code retrieves the latest CQC ratings data from the UKHF_CQC tables in the UDAL Lake/main warehouse to produce monthly CQC dashboards. The code contains some conditions to obtain the most recent information from the UKHF_CQC tables on the day the code is executed. 
 
