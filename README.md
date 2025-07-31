@@ -1,10 +1,10 @@
 # CQC GP and Care Homes monthly reporting
-Repository to store all codes used to process CQC ratings data required for monthly CQC GP and Care Homes ratings reporting. This is part of the BAU process for refreshing two of the products that the Quality Improvement Strategic Analysis team own: [CQC GP dashboard](https://future.nhs.uk/Quality/view?objectID=33056464) and [CQC Care Homes dashboard](https://future.nhs.uk/Quality/view?objectID=33114832)
+Repository to store all codes used to process CQC ratings data required for monthly CQC GP and Care Homes ratings reporting. This is part of the BAU process for refreshing two of the products that the Quality Improvement Strategic Analysis team own: [CQC GP dashboard](https://future.nhs.uk/Quality/view?objectID=33056464) and [CQC Care Homes dashboard](https://future.nhs.uk/Quality/view?objectID=33114832).
 
 
 ## About this project
 The Care Quality Commission (CQC) is the regulator that monitors and inspects all health and social care services in England to ensure standards are being met. 
-After an inspection, they rate the quality of care for their five key questions: are they safe, effective, caring, responsive and well-led? There is a rating for each question and an overall rating. Ratings will be based on a four-point scale; Outstanding, Good, Requires Improvement or Inadequate. More information can be found on the [CQC website](https://www.cqc.org.uk/about-us/how-we-do-our-job/inspection-reports)
+After an inspection, they rate the quality of care for their five key questions: are they safe, effective, caring, responsive and well-led? There is a rating for each question and an overall rating. Ratings will be based on a four-point scale; Outstanding, Good, Requires Improvement or Inadequate. More information can be found on the [CQC website](https://www.cqc.org.uk/about-us/how-we-do-our-job/inspection-reports).
 
 This repository contains codes to produce analysis for the CQC GP and Care Homes dashboards. 
 The code retrieves the latest CQC ratings data from the UKHF_CQC tables in the UDAL Lake/main warehouse to produce monthly CQC dashboards. The code contains some conditions to obtain the most recent information from the UKHF_CQC tables on the day the code is executed. 
@@ -40,10 +40,10 @@ See LICENSE for more information.
 The documentation is © Crown copyright and available under the terms of the Open Government 3.0 licence.
 
 ## Author
-Geoffrey Sharpe
-Kirsty Walker
-Shalika De Silva - shalikadesilva@nhs.net
+- Geoffrey Sharpe
+- Kirsty Walker
+- Shalika De Silva - shalikadesilva@nhs.net
 
 ## Contact
-To get in touch with us and find out more about the Quality Improvement Strategic Analysis Team please email us at england.da-qis-analysis@nhs.net 
+To get in touch with us and find out more about the Quality Improvement Strategic Analysis Team please email us at england.da-qis-analysis@nhs.net. 
 
