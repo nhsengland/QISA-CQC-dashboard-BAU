@@ -1,15 +1,16 @@
 # CQC GP and Care Homes monthly reporting
-Repository to store all the code relating to the latest CQC ratings data required for monthly CQC GP and Care Homes ratings reporting
+Repository to store all codes used to process CQC ratings data required for monthly CQC GP and Care Homes ratings BAU reporting. This is part of the process for refreshing two of the products that the Quality Improvement Strategic Analysis team own:
 
 
-## About this project / method
-This repo contains code to produce analysis for the CQC GP and Care Homes dashboards. 
+## About this project
+This repository contains codes to produce analysis for the CQC GP and Care Homes dashboards. 
 The code retrieves the latest CQC ratings data from the UKHF_CQC tables in the UDAL Lake/main warehouse to produce monthly CQC dashboards. The code contains some conditions to obtain the most recent information from the UKHF_CQC tables on the day the code is executed. 
-Requirements
--  Access to Azure Databricks
+
+## Requirements
+-  Access to Azure Databricks in UDAL
 -  Access to Azure Storage Explorer/ NHS National Data Platform/ Quality Improvement Data Lake (Q&I Lake)
 
-## Summary the code	
+## Summary of the code	
 -	Databricks Notebook - Max_API_Call_Date: 
 This notebook contains code to obtain the most recent API call date from the UKHF CQC location_SCD table and save it in the Q&I Lake. Max_API_Call_Date indicates when the data was last refreshed. 
 
@@ -28,7 +29,7 @@ Finally, these two outputs are combined to produce the final output, which is th
 ## Data sources
 CQC API - Home - [CQC Developer Portal](https://api.service.cqc.org.uk)
 
-Please see the data flow charts 
+For more information about the data tables used, please see the data flow charts.
 
 ## License
 Unless stated otherwise, the codebase is released under the MIT LICENSE This covers both the codebase and any sample code in the documentation.
@@ -36,8 +37,10 @@ See LICENSE for more information.
 The documentation is © Crown copyright and available under the terms of the Open Government 3.0 licence. https://github.com/nhsengland/Maternity-reading-the-signals/blob/Gary-QA/LICENSE
 
 ## Author
+Geoffrey Sharpe
+Kirsty Walker
 Shalika De Silva - shalikadesilva@nhs.net
 
 ## Contact
--	To get in touch with us find out more about the Quality Improvement Strategic Analysis Team get in touch at england.da-qis-analysis@nhs.net 
+To get in touch with us and find out more about the Quality Improvement Strategic Analysis Team please email us at england.da-qis-analysis@nhs.net 
 
