@@ -35,8 +35,8 @@ CQC API - Home - [CQC Developer Portal](https://api.service.cqc.org.uk)
 For more information about the data tables used, please see the data flow charts.
 
 ## License
-Unless stated otherwise, the codebase is released under the MIT LICENSE This covers both the codebase and any sample code in the documentation.
-See LICENSE for more information.
+Unless stated otherwise, the codebase is released under the MIT LICENSE. This covers both the codebase and any sample code in the documentation.
+See [MIT License](LICENSE.md) for more information.
 The documentation is © Crown copyright and available under the terms of the Open Government 3.0 licence.
 
 ## Author
