@@ -1,31 +1,39 @@
+Title: CQC GP and CH dashboards data last refreshed date
+Team : Quality Improvement Strategic Analysis (QISA) Team
+
+
+##load the table
+
 %Python
-#load the table
 Locations_SCD = spark.read.parquet("abfss://unrestricted@udalstdatacuratedprod.dfs.core.windows.net/reference/UKHD/CQC/Locations_SCD/Published/1/")
 
-#create sql tables
+##create sql tables
+%Python
 Locations_SCD.createOrReplaceTempView("Locations_SCD")
 
-
+##obtain max API_call _date
 %sql
 
 DROP View IF EXISTS Max_API_Call_Date;
 CREATE OR REPLACE TEMP View Max_API_Call_Date AS
 SELECT
     'CQC' AS Indicator,
-    MAX(API_Call_Date) AS Latest_date
+     MAX(API_Call_Date) AS Latest_date
 FROM Locations_SCD;
 
+##Change the format of the date
 %sql
 DROP TABLE IF EXISTS tbl_CQC_Max_API_Call_Date;
 CREATE TABLE tbl_CQC_Max_API_Call_Date AS
 
 SELECT
     'CQC' as Indicator,
-    date_format(Latest_date, 'yyyy/MM/dd HH:mm:ss') AS latest_date FROM Max_API_Call_Date;
+     date_format(Latest_date, 'yyyy/MM/dd HH:mm:ss') AS latest_date FROM Max_API_Call_Date;
 
-#overwrite the existing file and save it as a CSV
 
-#Python
+##overwrite the existing file and save it as a CSV
+
+%Python
 From pyspark.sql import functions as F # Best practice to import functions as F (See RAP pyspark guidance)
 
 def fn_test_file_exists(path_final_csv_save: str):
@@ -59,9 +67,9 @@ def fn_write_dataframe_to_csv(df: F.DataFrame, path_final_csv_save: str):
 
 
 
-#Save the final output in the Q&I Lake
+##Save the final output in the Q&I Lake
 
-#Python
+%Python
 mixed_final_df = spark.table("tbl_CQC_Max_API_Call_Date") # This takes the TEMP VIEW tbl_CQC_Max_API_Call_Date created using SQL and ensures that the function can read it. (coded in SQL to create the TEMP VIEW)
 path_final_csv_save = "abfss://analytics-projects@udalstdataanalysisprod.dfs.core.windows.net/QualityImprovement/Quality/CQC/tbl_CQC_Max_API_Call_Date.csv"  
 #Delete the file if it already exists,avaiding an issue with permission to overwrite the file if it was previously created by someone else:
