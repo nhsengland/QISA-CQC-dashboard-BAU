@@ -42,7 +42,7 @@ The documentation is © Crown copyright and available under the terms of the Ope
 ## Author
 - Geoffrey Sharpe
 - Kirsty Walker
-- Shalika De Silva - shalikadesilva@nhs.net
+- Shalika De Silva
 
 ## Contact
 To get in touch with us and find out more about the Quality Improvement Strategic Analysis Team please email us at england.da-qis-analysis@nhs.net. 
