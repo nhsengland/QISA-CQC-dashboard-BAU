@@ -1,0 +1,80 @@
+Title: CQC GP and CH dashboards data last refreshed date
+Team : Quality Improvement Strategic Analysis (QISA) Team
+
+
+##load the table
+
+%Python
+Locations_SCD = spark.read.parquet("Link to the Location_SCD in UDAL")
+
+##create sql tables
+%Python
+Locations_SCD.createOrReplaceTempView("Locations_SCD")
+
+##obtain max API_call _date
+%sql
+
+DROP View IF EXISTS Max_API_Call_Date;
+CREATE OR REPLACE TEMP View Max_API_Call_Date AS
+SELECT
+    'CQC' AS Indicator,
+     MAX(API_Call_Date) AS Latest_date
+FROM Locations_SCD;
+
+##Change the format of the date
+%sql
+DROP TABLE IF EXISTS tbl_CQC_Max_API_Call_Date;
+CREATE TABLE tbl_CQC_Max_API_Call_Date AS
+
+SELECT
+    'CQC' as Indicator,
+     date_format(Latest_date, 'yyyy/MM/dd HH:mm:ss') AS latest_date FROM Max_API_Call_Date;
+
+
+##overwrite the existing file and save it as a CSV
+
+%Python
+From pyspark.sql import functions as F # Best practice to import functions as F (See RAP pyspark guidance)
+
+def fn_test_file_exists(path_final_csv_save: str):
+
+    path = path_final_csv_save
+
+    try:
+        files = dbutils.fs.ls(path)
+        return True
+    except:
+        return False
+
+def fn_write_dataframe_to_csv(df: F.DataFrame, path_final_csv_save: str): 
+
+    path_temp_csv_save = path_final_csv_save + "_temp" 
+ 
+    df.coalesce(1) \
+        .write.mode("overwrite") \
+        .option("encoding", "UTF-8") \
+        .csv(path_temp_csv_save, header=True)  
+ 
+    list_files = dbutils.fs.ls(path_temp_csv_save) 
+ 
+    for sub_files in list_files: 
+ 
+        if sub_files.name[-4:] == ".csv": 
+ 
+            dbutils.fs.cp("/".join([path_temp_csv_save, sub_files.name]), path_final_csv_save) 
+ 
+    _ = dbutils.fs.rm(path_temp_csv_save, recurse=True) # assigning to _ to suppress output, returning this is not important
+
+
+
+##Save the final output in the Q&I Lake
+
+%Python
+mixed_final_df = spark.table("tbl_CQC_Max_API_Call_Date") # This takes the TEMP VIEW tbl_CQC_Max_API_Call_Date created using SQL and ensures that the function can read it. (coded in SQL to create the TEMP VIEW)
+path_final_csv_save = "Link to the location where the final output should be saved in UDAL Lake"  
+#Delete the file if it already exists,avaiding an issue with permission to overwrite the file if it was previously created by someone else:
+if fn_test_file_exists(path_final_csv_save) ==True:
+
+    dbutils.fs.rm(path_final_csv_save, recurse=True) 
+    
+fn_write_dataframe_to_csv(df=mixed_final_df, path_final_csv_save=path_final_csv_save)
