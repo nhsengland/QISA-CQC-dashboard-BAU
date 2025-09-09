@@ -1,0 +1,575 @@
+#Title : CQC Care Homes Dashboard code
+#Team  : Quality Improvement Strategic Analysis (QISA) Team
+
+##Load the CQC tables and commissioner hierarchies tables from the lake
+
+%Python
+Locations_SCD = spark.read.parquet("Link to the Location_SCD in UDAL")
+Locations_LinkTable_Current_Ratings = spark.read.parquet("Link to the Locations_LinkTable_Current_Ratings table in UDAL")
+commissioner_hierarchies = spark.read.parquet("Link to the commissioner_hierarchies table in UDAL")
+Locations_LinkTable_GAC_Service_Types = spark.read.parquet("Link to the Locations_LinkTable_GAC_Service_Types in UDAL")
+
+##Create sql tables in databricks
+
+#Python
+Locations_SCD.createOrReplaceTempView("Locations_SCD")
+Locations_LinkTable_Current_Ratings.createOrReplaceTempView("Locations_LinkTable_Current_Ratings")
+commissioner_hierarchies.createOrReplaceTempView("commissioner_hierarchies")
+Locations_LinkTable_GAC_Service_Types.createOrReplaceTempView("Locations_LinkTable_GAC_Service_Types")
+
+##This retrieves the latest CQC ratings for Care Homes and saves them in a table in databricks
+
+%sql
+DROP TABLE IF EXISTS tbl_CQC_Carehome_Current_Ratings;
+CREATE OR REPLACE Table tbl_CQC_Carehome_Current_Ratings AS
+
+SELECT
+    a.locationId  as Location_ID,
+	  a.name  as Location_Name,
+	  a.numberOfBeds as Number_Of_Bed,
+	  a.onspdCcgCode,
+      a.onspdCcgName,
+      a.odsCode,
+      a.odsCcgCode,
+      a.odsCcgName,
+	  a.onspdLatitude, 
+      a.onspdLongitude,
+	  a.API_Call_Date,
+	  a.careHome as Care_Home,
+	  b.name as Domain,
+	  CASE
+			when b.rating ='Inspected but not rated' then 'No published rating'
+			when b.rating ='Insufficient evidence to rate' then 'No published rating'
+			else COALESCE(b.rating,'No published rating')
+			end as Latest_Rating,
+	  CAST((b.reportDate) as VARCHAR(30)) as Publication_Date,
+	  case
+			when f.locationId is not null
+			then 'Y'
+			else ''
+			end as Residential_Homes,
+	  case
+			when g.locationId is not null
+			then 'Y'
+			else ''
+			end as Nursing_Homes,
+	  d.STP_Code as ODS_STP_Code,
+	  d.STP_Name as ODS_STP_Name,
+	  d.Region_Code as ODS_Region_Code,
+	  d.Region_Name as ODS_Region_Name,
+	  e.STP_Code as ONSPD_STP_Code,
+	  e.STP_Name as ONSPD_STP_Name,
+	  e.Region_Code as ONSPD_Region_Code,
+	  e.Region_Name as ONSPD_Region_Name
+
+from
+    Locations_SCD a
+	  inner join Locations_LinkTable_Current_Ratings b
+	  on a.locationId = b.locationID 
+	  and a.API_Call_Date = b.API_Call_Date
+	  inner join Locations_LinkTable_GAC_Service_Types c
+	  on a.locationId=c.locationID 
+	  and a.API_Call_Date = c.API_Call_Date
+	  left join commissioner_hierarchies d
+	  on a.odsCcgCode = d.Organisation_Code
+	  left join commissioner_hierarchies e
+	  on a.onspdCcgName = e.Organisation_Name
+	  left join (select
+				locationID,
+				API_Call_Date
+				from
+				Locations_LinkTable_GAC_Service_Types
+				where
+				name = 'Residential homes') f 
+	  on a.locationId = f.locationID 
+	  and a.API_Call_Date = f.API_Call_Date 
+	  left join (select
+				locationID,
+				API_Call_Date
+				from
+				Locations_LinkTable_GAC_Service_Types
+				where
+				name = 'Nursing homes') g 
+	  on a.locationId = g.locationID 
+	  and a.API_Call_Date = g.API_Call_Date
+
+where
+a.Is_Latest = 1 
+and a.registrationStatus='Registered'
+and a.organisationType='Location'
+and a.careHome='Y'
+
+
+UNION
+
+select
+      a.locationId  as Location_ID
+	  ,a.name  as Location_Name
+	  ,a.numberOfBeds as Number_Of_Bed
+	  ,a.onspdCcgCode
+      ,a.onspdCcgName
+      ,a.odsCode
+      ,a.odsCcgCode
+      ,a.odsCcgName
+	  ,a.onspdLatitude 
+      ,a.onspdLongitude
+	  ,a.API_Call_Date
+	  ,a.careHome  as Care_Home
+	  ,'Overall'  as Domain
+	  ,case
+			when a.overallRating ='Inspected but not rated' then 'No published rating'
+			when a.overallRating ='Insufficient evidence to rate' then 'No published rating'
+			else COALESCE(a.overallRating,'No published rating')
+			end as Latest_Rating
+	 
+	  ,cast ((a.overallReportDate) as VARCHAR(30)) as Publication_Date
+	  ,case
+			when e.locationId is not null
+			then 'Y'
+			else ''
+			end as Residential_Homes
+	  ,case
+			when f.locationId is not null
+			then 'Y'
+			else ''
+			end as Nursing_Homes
+	  ,c.STP_Code as ODS_STP_Code
+	  ,c.STP_Name as ODS_STP_Name
+	  ,c.Region_Code as ODS_Region_Code
+	  ,c.Region_Name as ODS_Region_Name
+	  ,d.STP_Code as ONSPD_STP_Code
+	  ,d.STP_Name as ONSPD_STP_Name
+	  ,d.Region_Code as ONSPD_Region_Code
+	  ,d.Region_Name as ONSPD_Region_Name
+from
+      Locations_SCD a
+	  inner join Locations_LinkTable_GAC_Service_Types b
+	  on a.locationId = b.locationID 
+	  and a.API_Call_Date = b.API_Call_Date
+	  left join commissioner_hierarchies c
+	  on a.odsCcgCode= c.Organisation_Code
+	  left join commissioner_hierarchies d
+	  on a.onspdCcgName = d.Organisation_Name
+	  left join (select
+				locationID,
+				API_Call_Date
+				from
+				Locations_LinkTable_GAC_Service_Types
+				where
+				name = 'Residential homes') e
+	  on a.locationId = e.locationID 
+	  and a.API_Call_Date = e.API_Call_Date 
+	  left join (select
+				locationID,
+				API_Call_Date
+				from
+				Locations_LinkTable_GAC_Service_Types
+				where
+				name = 'Nursing homes') f
+	  on a.locationId = f.locationID 
+	  and a.API_Call_Date = f.API_Call_Date
+
+where
+a.Is_Latest = 1 
+and a.registrationStatus='Registered'
+and a.organisationType='Location'
+and a.careHome='Y'
+
+
+
+##This retrieves the SAF ratings for all locations from the JSON text in the Location_SCD table and saves the data in the CQC assessment ratings table
+
+%sql
+DROP VIEW IF EXISTS AssessmentRatings;
+
+CREATE OR REPLACE TEMP VIEW AssessmentRatings AS
+
+SELECT locationId as Location_ID,
+       name as Location_Name,
+	   onspdCcgCode as onspdCcgCode,
+	   onspdCcgName as onspdCcgName,
+	   odsCode as odsCode,
+	   odsCcgCode as odsCcgCode,
+	   odsCcgName as odsCcgName,
+	   onspdLatitude as onspdLatitude,
+	   onspdLongitude as onspdLongitude,
+	   API_Call_Date as API_Call_Date,
+       numberOfBeds as Number_Of_Bed,
+	   careHome as Care_Home,
+	   type as Service_Type,
+      get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
+	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[0].name') as Domain,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[0].rating') as Latest_rating,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
+	   Getdate() as DateUpdated
+	
+FROM Locations_SCD
+where JSON_Plain_Text IS NOT NULL
+and registrationStatus='Registered' 
+and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+
+UNION
+SELECT locationId as Location_ID,
+       name as Location_Name,
+	   onspdCcgCode as onspdCcgCode,
+	   onspdCcgName as onspdCcgName,
+	   odsCode as odsCode,
+	   odsCcgCode as odsCcgCode,
+	   odsCcgName as odsCcgName,
+	   onspdLatitude as onspdLatitude,
+	   onspdLongitude as onspdLongitude,
+	   API_Call_Date as API_Call_Date,
+       numberOfBeds as Number_Of_Bed,
+	   careHome as Care_Home,
+	   type as Service_Type,
+       get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
+	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[1].name') as Domain,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[1].rating') as Latest_rating,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
+	   Getdate() as DateUpdated
+	
+
+FROM Locations_SCD
+where JSON_Plain_Text IS NOT NULL
+and registrationStatus='Registered' 
+and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+
+UNION
+
+SELECT locationId as Location_ID,
+       name as Location_Name,
+	   onspdCcgCode as onspdCcgCode,
+	   onspdCcgName as onspdCcgName,
+	   odsCode as odsCode,
+	   odsCcgCode as odsCcgCode,
+	   odsCcgName as odsCcgName,
+	   onspdLatitude as onspdLatitude,
+	   onspdLongitude as onspdLongitude,
+	   API_Call_Date as API_Call_Date,
+       numberOfBeds as Number_Of_Bed,
+	   careHome as Care_Home,
+	   type as Service_Type,
+        get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
+	   get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[2].name') as Domain,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[2].rating') as Latest_rating,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
+	 Getdate() as DateUpdated
+	
+FROM Locations_SCD
+where JSON_Plain_Text IS NOT NULL
+and registrationStatus='Registered' 
+and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1'
+UNION
+
+SELECT locationId as Location_ID,
+       name as Location_Name,
+	   onspdCcgCode as onspdCcgCode,
+	   onspdCcgName as onspdCcgName,
+	   odsCode as odsCode,
+	   odsCcgCode as odsCcgCode,
+	   odsCcgName as odsCcgName,
+	   onspdLatitude as onspdLatitude,
+	   onspdLongitude as onspdLongitude,
+	   API_Call_Date as API_Call_Date,
+       numberOfBeds as Number_Of_Bed,
+	   careHome as Care_Home,
+	   type as Service_Type,
+        get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
+	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[3].name') as Domain,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[3].rating') as Latest_rating,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
+	  Getdate() as DateUpdated
+	
+FROM Locations_SCD
+where JSON_Plain_Text IS NOT NULL
+and registrationStatus='Registered' 
+and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+
+UNION
+SELECT locationId as Location_ID,
+       name as Location_Name,
+	   onspdCcgCode as onspdCcgCode,
+	   onspdCcgName as onspdCcgName,
+	   odsCode as odsCode,
+	   odsCcgCode as odsCcgCode,
+	   odsCcgName as odsCcgName,
+	   onspdLatitude as onspdLatitude,
+	   onspdLongitude as onspdLongitude,
+	   API_Call_Date as API_Call_Date,
+       numberOfBeds as Number_Of_Bed,
+	   careHome as Care_Home,
+	   type as Service_Type,
+       get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
+	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[4].name') as Domain,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[4].rating') as Latest_rating,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
+	   Getdate() as DateUpdated
+	
+FROM Locations_SCD
+where JSON_Plain_Text IS NOT NULL
+and registrationStatus='Registered' 
+and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+
+UNION
+
+SELECT locationId as Location_ID,
+       name as Location_Name,
+	   onspdCcgCode as onspdCcgCode,
+	   onspdCcgName as onspdCcgName,
+	   odsCode as odsCode,
+	   odsCcgCode as odsCcgCode,
+	   odsCcgName as odsCcgName,
+	   onspdLatitude as onspdLatitude,
+	   onspdLongitude as onspdLongitude,
+	   API_Call_Date as API_Call_Date,
+       numberOfBeds as Number_Of_Bed,
+	   careHome as Care_Home,
+	   type as Service_Type,
+        get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
+	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
+	   'Overall' as Domain,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].rating') as Latest_rating,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
+	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
+	  Getdate() as DateUpdated
+	FROM Locations_SCD
+where JSON_Plain_Text IS NOT NULL
+and registrationStatus='Registered' 
+and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' ;
+
+##Create the final table for CQC Assessment Ratings
+
+%sql
+-- Check if the target table exists, if so, drop it
+DROP TABLE IF EXISTS CQC_Assessment_Ratings;
+
+-- Insert data into the final table
+CREATE TABLE CQC_Assessment_Ratings AS
+
+
+Select Location_ID,
+       Location_Name,
+	   onspdCcgCode,
+	   onspdCcgName,
+	   odsCode,
+	   odsCcgCode,
+	   odsCcgName,
+	   onspdLatitude,
+	   onspdLongitude,
+	   API_Call_Date,
+       Number_Of_Bed,
+	   Care_Home,
+	   Service_Type,
+       title,
+	   lastInspectionDate,
+	   Domain,
+	   case
+			when Latest_rating ='Inspected but not rated' then 'No published rating'
+			when Latest_rating ='Insufficient evidence to rate' then 'No published rating'
+			when Latest_rating ='No Approved Rating' then 'No published rating'
+			when Latest_rating ='Not all regulations met' then 'No published rating'
+			when Latest_rating ='Evidence requirements partially / not yet scored' then 'No published rating'
+			when Latest_rating ='Regulations met' then 'No published rating'
+			when Latest_rating ='' then 'No published rating'
+			else COALESCE(Latest_rating,'No published rating')
+			end as Latest_rating,
+	   ServiceName,
+	   AssessmentDate,
+	  date_format(Publication_Date, 'yyyy-MM-dd') AS Publication_Date,
+	   DateUpdated
+
+	  FROM AssessmentRatings;
+
+
+
+##This retrieves the latest CQC ratings for Care Homes published from SAF (CQC Single Assessment Framework), combines with CQC ratings from previous process and saves the combined care home ratings data in a table in databricks.
+
+%sql
+DROP TABLE IF EXISTS Assess;
+DROP TABLE IF EXISTS CareHome;
+DROP TABLE IF EXISTS GP;
+DROP TABLE IF EXISTS CareHome_GP;
+DROP TABLE IF EXISTS CareHome_with_SAF;
+DROP TABLE IF EXISTS Combined_CH_SAF;
+--------------------------------------------------------------------------------------------------------------------------------------------------
+-- STEP 1: Create a temporary table conntaining the Location_ID for each care home included in tbl_CQC_Carehome_Current_Ratings that also has ratings
+--------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+CREATE OR REPLACE TEMP VIEW Assess AS
+SELECT Distinct Location_ID
+FROM CQC_Assessment_Ratings
+WHERE serviceName in ('Care Homes','General Practice');
+
+CREATE OR REPLACE TEMP VIEW CareHome AS
+SELECT Distinct Location_ID
+FROM  tbl_CQC_Carehome_Current_Ratings;
+
+CREATE OR REPLACE TEMP VIEW CareHome_with_SAF AS
+SELECT Distinct a.Location_ID 
+FROM CareHome a
+LEFT JOIN Assess b  ON a.Location_ID = b.Location_ID
+WHERE b.Location_ID is not null;
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+-- STEP 2: JOIN a subset of tbl_CQC_Carehome_Current_Ratings WHERE a.Latest_Rating = 'No published rating'
+-- with CQC_Assessment_Ratings on Location_ID and API_Call_Date, for the set defined above into CareHome_with_SAF
+-- The Left Join will produce rows for the 5 detail rating domains in addition to the existing row for Overall
+-----------------------------------------------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE TEMP VIEW Combined_CH_SAF AS
+SELECT a.Location_ID,
+       a.Location_Name,
+      a.Number_Of_Bed,
+      a.onspdCcgCode,
+      a.onspdCcgName,
+      a.odsCode,
+      a.odsCcgCode,
+      a.odsCcgName,
+      a.onspdLatitude,
+      a.onspdLongitude,
+      a.API_Call_Date,
+      a.Care_Home,
+      a.Domain,
+      a.Latest_Rating,
+      a.Publication_Date,
+      a.Residential_Homes,
+      a.Nursing_Homes,
+      a.ODS_STP_Code,
+      a.ODS_STP_Name,
+      a.ODS_Region_Code,
+      a.ODS_Region_Name,
+      a.ONSPD_STP_Code,
+      a.ONSPD_STP_Name,
+      a.ONSPD_Region_Code,
+      a.ONSPD_Region_Name,
+	  b.Location_ID as SAF_Location_ID,
+	  b.Domain as SAF_Domain,
+	  b.Latest_rating as SAF_Latest_rating,
+	  b.AssessmentDate as SAF_AssessmentDate,
+	  b.Publication_Date as SAF_Publication_Date
+	  
+
+  FROM tbl_CQC_Carehome_Current_Ratings a
+  LEFT JOIN CQC_Assessment_Ratings b on a.Location_ID = b.Location_ID and a.API_Call_Date = b.API_Call_Date 
+  WHERE a.Latest_Rating = 'No published rating'
+  and a.Location_ID in (Select Location_ID FROM CareHome_with_SAF);
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- STEP 3: Substitute the data for [Domain], [Latest_Rating], and [Publication_Date] from the SAF ratings table for the data in these columns 
+-------------------------------------------------------------------------------------------------------------------------------------------------
+  
+  CREATE OR REPLACE TEMP VIEW Staging_Combined_CH_SAF AS      
+  SELECT Location_ID
+      ,Location_Name
+      ,Number_Of_Bed
+      ,onspdCcgCode
+      ,onspdCcgName
+      ,odsCode
+      ,odsCcgCode
+      ,odsCcgName
+      ,onspdLatitude
+      ,onspdLongitude
+      ,API_Call_Date
+      ,Care_Home
+      ,SAF_Domain as Domain
+      ,SAF_Latest_rating as Latest_Rating
+      ,SAF_Publication_Date as Publication_Date
+      ,Residential_Homes
+      ,Nursing_Homes
+      ,ODS_STP_Code
+      ,ODS_STP_Name
+      ,ODS_Region_Code
+      ,ODS_Region_Name
+      ,ONSPD_STP_Code
+      ,ONSPD_STP_Name
+      ,ONSPD_Region_Code
+      ,ONSPD_Region_Name
+
+FROM Combined_CH_SAF;
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- STEP 4: CREATE new combined Care Home ratings table 
+-- i) Select from tbl_CQC_Carehome_Current_Ratings filtered to exclude Location_ID s included in the SAF ratings table Staging_Combined_CH_SAF just created
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+DROP TABLE IF EXISTS tbl_CQC_Carehome_Ratings;
+CREATE table tbl_CQC_Carehome_Ratings AS 
+
+SELECT *		
+FROM tbl_CQC_Carehome_Current_Ratings
+WHERE Location_ID NOT in (Select Location_ID FROM CareHome_with_SAF)
+
+UNION
+
+SELECT *		
+FROM Staging_Combined_CH_SAF;
+
+
+##Update the table set Requires Improvement to Requires improvement
+
+%sql
+Update tbl_CQC_Carehome_Ratings 
+set  latest_rating = 'Requires improvement'
+where Latest_Rating = 'Requires Improvement'
+
+%Python 
+#Replace the final output and save it as a CSV
+From pyspark.sql import functions as F # Best practice to import functions as F (See RAP pyspark guidance)
+
+def fn_test_file_exists(path_final_csv_save: str):
+
+    path = path_final_csv_save
+
+    try:
+        files = dbutils.fs.ls(path)
+        return True
+    except:
+        return False
+
+def fn_write_dataframe_to_csv(df: F.DataFrame, path_final_csv_save: str): 
+
+    path_temp_csv_save = path_final_csv_save + "_temp" 
+ 
+    df.coalesce(1) \
+        .write.mode("overwrite") \
+        .option("encoding", "UTF-8") \
+        .csv(path_temp_csv_save, header=True)  
+ 
+    list_files = dbutils.fs.ls(path_temp_csv_save) 
+ 
+    for sub_files in list_files: 
+ 
+        if sub_files.name[-4:] == ".csv": 
+ 
+            dbutils.fs.cp("/".join([path_temp_csv_save, sub_files.name]), path_final_csv_save) 
+ 
+    _ = dbutils.fs.rm(path_temp_csv_save, recurse=True) # assigning to _ to suppress output, returning this is not important
+
+
+##Save the final output in the Q&I Lake
+
+%Python
+Mixed_final_df = spark.table("tbl_CQC_Carehome_Ratings") # This takes the TEMP VIEW tbl_CQC_Carehome_Ratings created using SQL and ensures that the function can read it. (coded in SQL to create the TEMP VIEW)
+path_final_csv_save = "Link to the location where the final output should be saved in UDAL Lake"  
+#Delete the file if it already exists,avaiding an issue with permission to overwrite the file if it was previously created by someone else:
+if fn_test_file_exists(path_final_csv_save) ==True:
+
+    dbutils.fs.rm(path_final_csv_save, recurse=True) 
+    
+fn_write_dataframe_to_csv(df=mixed_final_df, path_final_csv_save=path_final_csv_save)
