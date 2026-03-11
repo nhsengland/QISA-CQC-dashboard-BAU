@@ -174,228 +174,226 @@ Update tbl_CQC_GP_Current_Ratings
 Set onspdCcgName = 'NHS Norfolk and Waveney CCG'
 where Location_ID = '1-19894382880';
 
+ -- Add onspdccgname for Minchinhampton Surgery---
+ Update tbl_CQC_GP_Current_Ratings
+ Set onspdCcgName = 'NHS Gloucestershire CCG'
+ where Location_ID = '1-25879986935';
+ 
+
+ -- Add onspdccgname for KPMC Mile Walk (Kilburn Park Medical Centre)---
+ Update tbl_CQC_GP_Current_Ratings
+ Set onspdCcgName = 'NHS North West London CCG'
+ where Location_ID = '1-23680418175';
+
 
  ##This retrieves the SAF ratings for all locations from the JSON text in the Location_SCD table and saves the data in the CQC assessment ratings table
 
 %sql
 
-DROP VIEW IF EXISTS AssessmentRatings;
+DROP VIEW IF EXISTS CQC_Assessment_Ratings;
 
 CREATE OR REPLACE TEMP VIEW AssessmentRatings AS
+WITH base AS (
+  SELECT
+    t.locationId,
+    t.name,
+    t.onspdCcgCode,
+    t.onspdCcgName,
+    t.odsCode,
+    t.odsCcgCode,
+    t.odsCcgName,
+    t.onspdLatitude,
+    t.onspdLongitude,
+    t.API_Call_Date,
+    t.numberOfBeds,
+    t.careHome,
+    t.`type` AS Service_Type,
+    t.JSON_Plain_Text
+  FROM Locations_SCD t
+  WHERE t.JSON_Plain_Text IS NOT NULL
+    AND t.registrationStatus = 'Registered'
+    AND t.organisationType   = 'Location'
+    AND t.JSON_Plain_Text LIKE '%assessmentPlanId%'
+    AND t.Is_Latest = '1'
+),
 
-SELECT locationId as Location_ID,
-       name as Location_Name,
-	   onspdCcgCode as onspdCcgCode,
-	   onspdCcgName as onspdCcgName,
-	   odsCode as odsCode,
-	   odsCcgCode as odsCcgCode,
-	   odsCcgName as odsCcgName,
-	   onspdLatitude as onspdLatitude,
-	   onspdLongitude as onspdLongitude,
-	   API_Call_Date as API_Call_Date,
-       numberOfBeds as Number_Of_Bed,
-	   careHome as Care_Home,
-	   type as Service_Type,
-      get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
-	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[0].name') as Domain,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[0].rating') as Latest_rating,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
-	   Getdate() as DateUpdated
-	
-FROM Locations_SCD
-where JSON_Plain_Text IS NOT NULL
-and registrationStatus='Registered' 
-and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+-- 1) Read $.assessment as an array (only pulling the field we need to identify "latest")
+assessments AS (
+  SELECT
+    b.*,
+    from_json(
+      get_json_object(b.JSON_Plain_Text, '$.assessment'),
+      'ARRAY<STRUCT<assessmentPlanPublishedDateTime:STRING>>'
+    ) AS assessment_arr
+  FROM base b
+),
 
-UNION
-SELECT locationId as Location_ID,
-       name as Location_Name,
-	   onspdCcgCode as onspdCcgCode,
-	   onspdCcgName as onspdCcgName,
-	   odsCode as odsCode,
-	   odsCcgCode as odsCcgCode,
-	   odsCcgName as odsCcgName,
-	   onspdLatitude as onspdLatitude,
-	   onspdLongitude as onspdLongitude,
-	   API_Call_Date as API_Call_Date,
-       numberOfBeds as Number_Of_Bed,
-	   careHome as Care_Home,
-	   type as Service_Type,
-       get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
-	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[1].name') as Domain,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[1].rating') as Latest_rating,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
-	   Getdate() as DateUpdated
-	
+-- 2) Find the latest assessmentPlanPublishedDateTime in the array
+latest_pub AS (
+  SELECT
+    a.*,
+    aggregate(
+      a.assessment_arr,
+      CAST(NULL AS STRING),
+      (acc, x) -> CASE
+        WHEN acc IS NULL THEN x.assessmentPlanPublishedDateTime
+        WHEN to_timestamp(x.assessmentPlanPublishedDateTime) > to_timestamp(acc) THEN x.assessmentPlanPublishedDateTime
+        ELSE acc
+      END
+    ) AS latest_published_dt
+  FROM assessments a
+),
 
-FROM Locations_SCD
-where JSON_Plain_Text IS NOT NULL
-and registrationStatus='Registered' 
-and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+-- 3) Pull the full latest assessment object as a JSON string called latest_json
+--    (we parse assessments again, but still keep it relatively small: only fields we will extract later)
+latest_json_cte AS (
+  SELECT
+    lp.*,
+    to_json(
+    filter(
+    from_json(
+    get_json_object(lp.JSON_Plain_Text, '$.assessment'),
+    'ARRAY<STRUCT<assessmentPlanPublishedDateTime:STRING,
+    lastInspection:STRUCT<date:STRING>,
+    lastInsepction:STRUCT<date:STRING>,
+    ratings:STRUCT<
+    asgRatings:ARRAY<STRUCT<
+    title:STRING,
+    name:STRING,
+    rating:STRING,
+    assessmentDate:STRING,
+    keyQuestionRatings:ARRAY<STRUCT<name:STRING,rating:STRING>>
+        >>
+     >
+    >>'
+        ),
+        x -> x.assessmentPlanPublishedDateTime = lp.latest_published_dt
+      )[0]
+    ) AS latest_json
+  FROM latest_pub lp
+)
 
-UNION
+-- =========================================================
+-- PART A: Key Question Ratings (one row per domain/question)
+-- =========================================================
+SELECT
+  locationId AS Location_ID,
+  name       AS Location_Name,
+  onspdCcgCode,
+  onspdCcgName,
+  odsCode,
+  odsCcgCode,
+  odsCcgName,
+  onspdLatitude,
+  onspdLongitude,
+  API_Call_Date,
+  numberOfBeds AS Number_Of_Bed,
+  careHome     AS Care_Home,
+  Service_Type,
 
-SELECT locationId as Location_ID,
-       name as Location_Name,
-	   onspdCcgCode as onspdCcgCode,
-	   onspdCcgName as onspdCcgName,
-	   odsCode as odsCode,
-	   odsCcgCode as odsCcgCode,
-	   odsCcgName as odsCcgName,
-	   onspdLatitude as onspdLatitude,
-	   onspdLongitude as onspdLongitude,
-	   API_Call_Date as API_Call_Date,
-       numberOfBeds as Number_Of_Bed,
-	   careHome as Care_Home,
-	   type as Service_Type,
-        get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
-	   get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[2].name') as Domain,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[2].rating') as Latest_rating,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
-	 Getdate() as DateUpdated
-	
-FROM Locations_SCD
-where JSON_Plain_Text IS NOT NULL
-and registrationStatus='Registered' 
-and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1'
-UNION
+  get_json_object(latest_json, '$.ratings.asgRatings[0].title') AS title,
 
-SELECT locationId as Location_ID,
-       name as Location_Name,
-	   onspdCcgCode as onspdCcgCode,
-	   onspdCcgName as onspdCcgName,
-	   odsCode as odsCode,
-	   odsCcgCode as odsCcgCode,
-	   odsCcgName as odsCcgName,
-	   onspdLatitude as onspdLatitude,
-	   onspdLongitude as onspdLongitude,
-	   API_Call_Date as API_Call_Date,
-       numberOfBeds as Number_Of_Bed,
-	   careHome as Care_Home,
-	   type as Service_Type,
-        get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
-	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[3].name') as Domain,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[3].rating') as Latest_rating,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
-	  Getdate() as DateUpdated
-	
-FROM Locations_SCD
-where JSON_Plain_Text IS NOT NULL
-and registrationStatus='Registered' 
-and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+  coalesce(
+    get_json_object(latest_json, '$.lastInsepction.date'),
+    get_json_object(latest_json, '$.lastInspection.date')
+  ) AS lastInspectionDate,
 
-UNION
-SELECT locationId as Location_ID,
-       name as Location_Name,
-	   onspdCcgCode as onspdCcgCode,
-	   onspdCcgName as onspdCcgName,
-	   odsCode as odsCode,
-	   odsCcgCode as odsCcgCode,
-	   odsCcgName as odsCcgName,
-	   onspdLatitude as onspdLatitude,
-	   onspdLongitude as onspdLongitude,
-	   API_Call_Date as API_Call_Date,
-       numberOfBeds as Number_Of_Bed,
-	   careHome as Care_Home,
-	   type as Service_Type,
-       get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
-	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[4].name') as Domain,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].keyQuestionRatings[4].rating') as Latest_rating,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
-	   Getdate() as DateUpdated
-	
-FROM Locations_SCD
-where JSON_Plain_Text IS NOT NULL
-and registrationStatus='Registered' 
-and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' 
+  r.name   AS Domain,
+  r.rating AS Latest_Rating,
 
-UNION
+  get_json_object(latest_json, '$.ratings.asgRatings[0].name')           AS ServiceName,
+  get_json_object(latest_json, '$.ratings.asgRatings[0].assessmentDate') AS AssessmentDate,
+  get_json_object(latest_json, '$.assessmentPlanPublishedDateTime')      AS Publication_Date,
 
-SELECT locationId as Location_ID,
-       name as Location_Name,
-	   onspdCcgCode as onspdCcgCode,
-	   onspdCcgName as onspdCcgName,
-	   odsCode as odsCode,
-	   odsCcgCode as odsCcgCode,
-	   odsCcgName as odsCcgName,
-	   onspdLatitude as onspdLatitude,
-	   onspdLongitude as onspdLongitude,
-	   API_Call_Date as API_Call_Date,
-       numberOfBeds as Number_Of_Bed,
-	   careHome as Care_Home,
-	   type as Service_Type,
-        get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].title') as title,
-	    get_json_object(JSON_Plain_Text, '$.lastInspection.date') as lastInspectionDate,
-	   'Overall' as Domain,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].rating') as Latest_rating,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].name') as ServiceName,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].ratings.asgRatings[0].assessmentDate') as AssessmentDate,
-	    get_json_object(JSON_Plain_Text, '$.assessment[0].assessmentPlanPublishedDateTime') as Publication_Date,
-	  Getdate() as DateUpdated
-	FROM Locations_SCD
-where JSON_Plain_Text IS NOT NULL
-and registrationStatus='Registered' 
-and organisationType='Location' and JSON_Plain_Text LIKE '%assessmentPlanId%' and Is_Latest ='1' ;
+  current_timestamp() AS DateUpdated
 
+FROM latest_json_cte
+LATERAL VIEW explode(
+  from_json(
+    get_json_object(latest_json, '$.ratings.asgRatings[0].keyQuestionRatings'),
+    'ARRAY<STRUCT<name:STRING, rating:STRING>>'
+  )
+) r_tbl AS r
 
+UNION ALL
 
-##Create the final table for CQC Assessment Ratings
+-- ==========================================
+-- PART B: Overall Rating (one row per site)
+-- ==========================================
+SELECT
+  locationId AS Location_ID,
+  name       AS Location_Name,
+  onspdCcgCode,
+  onspdCcgName,
+  odsCode,
+  odsCcgCode,
+  odsCcgName,
+  onspdLatitude,
+  onspdLongitude,
+  API_Call_Date,
+  numberOfBeds AS Number_Of_Bed,
+  careHome     AS Care_Home,
+  Service_Type,
 
-%sql
+  get_json_object(latest_json, '$.ratings.asgRatings[0].title') AS title,
+
+  coalesce(
+    get_json_object(latest_json, '$.lastInsepction.date'),
+    get_json_object(latest_json, '$.lastInspection.date')
+  ) AS lastInspectionDate,
+
+  'Overall' AS Domain,
+  get_json_object(latest_json, '$.ratings.asgRatings[0].rating') AS Latest_Rating,
+
+  get_json_object(latest_json, '$.ratings.asgRatings[0].name')           AS ServiceName,
+  get_json_object(latest_json, '$.ratings.asgRatings[0].assessmentDate') AS AssessmentDate,
+  get_json_object(latest_json, '$.assessmentPlanPublishedDateTime')      AS Publication_Date,
+
+  current_timestamp() AS DateUpdated
+
+FROM latest_json_cte
+;
+
+-- Now we will create the final table for CQC Assessment Ratings
 -- Check if the target table exists, if so, drop it
+
 DROP TABLE IF EXISTS CQC_Assessment_Ratings;
 
---Insert data into the final table
-CREATE TABLE CQC_Assessment_Ratings AS
-
+-- Insert data into the final table
+CREATE OR REPLACE TABLE CQC_Assessment_Ratings
 
 Select Location_ID,
        Location_Name,
-	   onspdCcgCode,
-	   onspdCcgName,
-	   odsCode,
-	   odsCcgCode,
-	   odsCcgName,
-	   onspdLatitude,
-	   onspdLongitude,
-	   API_Call_Date,
+       onspdCcgCode,
+       onspdCcgName,
+       odsCode,
+       odsCcgCode,
+       odsCcgName,
+       onspdLatitude,
+       onspdLongitude,
+       API_Call_Date,
        Number_Of_Bed,
-	   Care_Home,
-	   Service_Type,
+       Care_Home,
+       Service_Type,
        title,
-	   lastInspectionDate,
-	   Domain,
-	   case
-			when Latest_rating ='Inspected but not rated' then 'No published rating'
-			when Latest_rating ='Insufficient evidence to rate' then 'No published rating'
-			when Latest_rating ='No Approved Rating' then 'No published rating'
-			when Latest_rating ='Not all regulations met' then 'No published rating'
-			when Latest_rating ='Evidence requirements partially / not yet scored' then 'No published rating'
-			when Latest_rating ='Regulations met' then 'No published rating'
-			when Latest_rating ='' then 'No published rating'
-			else COALESCE(Latest_rating,'No published rating')
-			end as Latest_rating,
-	   ServiceName,
-	   AssessmentDate,
-	   date_format(Publication_Date, 'yyyy-MM-dd') AS Publication_Date,
-	   DateUpdated
+       lastInspectionDate,
+       Domain,
+       case
+            when Latest_rating ='Inspected but not rated' then 'No published rating'
+            when Latest_rating ='Insufficient evidence to rate' then 'No published rating'
+            when Latest_rating ='No Approved Rating' then 'No published rating'
+            when Latest_rating ='Not all regulations met' then 'No published rating'
+            when Latest_rating ='Evidence requirements partially / not yet scored' then 'No published rating'
+            when Latest_rating ='Regulations met' then 'No published rating'
+            when Latest_rating ='' then 'No published rating'
+            else coalesce(Latest_rating,'No published rating')
+            end as Latest_rating,
+       ServiceName,
+       AssessmentDate,
+       Publication_Date,
+       DateUpdated
 
-	  FROM AssessmentRatings;
+       from AssessmentRatings;
 
 
 #This retrieves the latest CQC ratings for GP published from SAF (CQC Single Assessment Framework), combines with CQC ratings from previous process and saves the combined GP ratings data in a table in databricks.
